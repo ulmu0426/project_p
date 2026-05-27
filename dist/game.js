@@ -49,7 +49,24 @@ const ui = {
     touchStickKnob: mustQuery(touchStick, "span", HTMLSpanElement),
 };
 const TAU = Math.PI * 2;
-const WORLD = 5200;
+const FLOOR_REPEAT_SIZE = 5200;
+const INITIAL_CHEST_SPREAD = 2200;
+const MAX_ENEMIES = 190;
+const MAX_BOSSES = 3;
+const MAX_PROJECTILES = 360;
+const MAX_GEMS = 320;
+const MAX_PARTICLES = 460;
+const MAX_FLOATERS = 140;
+const MAX_ZONES = 60;
+const MAX_MINES = 80;
+const MAX_BEAMS = 48;
+const MAX_STRIKES = 90;
+const MAX_SCYTHES = 26;
+const MAX_CHESTS = 14;
+const DRAW_CULL_PADDING = 140;
+const ENEMY_DESPAWN_PADDING = 1500;
+const MAP_CHEST_DESPAWN_DISTANCE = 3200;
+const RUN_DURATION_SECONDS = 15 * 60;
 const BASE_MAX_HP = 100;
 const BASE_MOVE_SPEED = 235;
 const keys = new Set();
@@ -2084,10 +2101,10 @@ function resize() {
 }
 function buildFloorMarks() {
     floorMarks = [];
-    for (let i = 0; i < 340; i += 1) {
+    for (let i = 0; i < 240; i += 1) {
         floorMarks.push({
-            x: randomRange(-WORLD / 2, WORLD / 2),
-            y: randomRange(-WORLD / 2, WORLD / 2),
+            x: randomRange(0, FLOOR_REPEAT_SIZE),
+            y: randomRange(0, FLOOR_REPEAT_SIZE),
             size: randomRange(8, 36),
             rot: randomRange(0, TAU),
             kind: Math.random() > 0.72 ? "rune" : "stone",
@@ -2203,6 +2220,142 @@ function randomRange(min, max) {
 function distance(a, b) {
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
+function getEnemyStatScaling() {
+    const progress = clamp(state.time / RUN_DURATION_SECONDS, 0, 1);
+    const lateCurve = progress * progress;
+    return {
+        hpMultiplier: 1 + progress * 0.55 + lateCurve * 3.4,
+        damageMultiplier: 1 + progress * 0.22,
+        xpMultiplier: 1 + progress * 0.18 + lateCurve * 0.12,
+        minute: progress * (RUN_DURATION_SECONDS / 60),
+    };
+}
+function isVisibleCircle(entity, camera, radius, padding = DRAW_CULL_PADDING) {
+    const x = entity.x - camera.x;
+    const y = entity.y - camera.y;
+    return x > -radius - padding && x < width + radius + padding && y > -radius - padding && y < height + radius + padding;
+}
+function activeCullDistance() {
+    return Math.max(width, height) + ENEMY_DESPAWN_PADDING;
+}
+function trimListFromFront(list, max) {
+    if (list.length > max) {
+        list.splice(0, list.length - max);
+    }
+}
+function pushBounded(list, item, max) {
+    if (list.length >= max) {
+        list.splice(0, list.length - max + 1);
+    }
+    list.push(item);
+}
+function reserveListSpace(list, max, incoming) {
+    const allowed = Math.min(Math.max(0, Math.floor(incoming)), max);
+    const overflow = list.length + allowed - max;
+    if (overflow > 0) {
+        list.splice(0, overflow);
+    }
+    return allowed;
+}
+function removeFarthestEnemy(origin, predicate) {
+    let removeIndex = -1;
+    let farthest = -Infinity;
+    state.enemies.forEach((enemy, index) => {
+        if (!predicate(enemy))
+            return;
+        const dist = distance(enemy, origin);
+        if (dist > farthest) {
+            farthest = dist;
+            removeIndex = index;
+        }
+    });
+    if (removeIndex < 0)
+        return false;
+    state.enemies.splice(removeIndex, 1);
+    return true;
+}
+function makeRoomForEnemy(kind, origin) {
+    if (state.enemies.length < MAX_ENEMIES)
+        return true;
+    if (kind === "shade" || kind === "runner")
+        return false;
+    removeFarthestEnemy(origin, (enemy) => enemy.kind !== "boss");
+    return state.enemies.length < MAX_ENEMIES;
+}
+function spawnGem(gem) {
+    state.gems.push(gem);
+    compactGemsToBudget();
+}
+function compactGemsToBudget() {
+    const overflow = state.gems.length - MAX_GEMS;
+    if (overflow <= 0)
+        return;
+    const mergeCount = Math.min(state.gems.length, overflow + 1);
+    const merged = state.gems.splice(0, mergeCount);
+    const totalValue = merged.reduce((sum, gem) => sum + gem.value, 0);
+    const anchor = merged[0];
+    const x = totalValue > 0 ? merged.reduce((sum, gem) => sum + gem.x * gem.value, 0) / totalValue : anchor.x;
+    const y = totalValue > 0 ? merged.reduce((sum, gem) => sum + gem.y * gem.value, 0) / totalValue : anchor.y;
+    state.gems.unshift({
+        x,
+        y,
+        r: Math.min(11, Math.max(...merged.map((gem) => gem.r)) + 2),
+        value: totalValue,
+        bob: randomRange(0, TAU),
+    });
+}
+function trimChestsToBudget() {
+    while (state.chests.length > MAX_CHESTS) {
+        const player = getPlayer();
+        let removeIndex = -1;
+        let worstScore = -Infinity;
+        state.chests.forEach((chest, index) => {
+            const sourceScore = chest.source === "map" ? 2 : chest.source === "elite" ? 1 : 0;
+            const score = sourceScore * 1000000 + distance(chest, player);
+            if (score > worstScore) {
+                worstScore = score;
+                removeIndex = index;
+            }
+        });
+        if (removeIndex < 0)
+            return;
+        state.chests.splice(removeIndex, 1);
+    }
+}
+function pruneDistantMapChests() {
+    const player = getPlayer();
+    for (let i = state.chests.length - 1; i >= 0; i -= 1) {
+        const chest = state.chests[i];
+        if (chest.source === "map" && distance(chest, player) > MAP_CHEST_DESPAWN_DISTANCE) {
+            state.chests.splice(i, 1);
+        }
+    }
+}
+function enforceEntityBudgets() {
+    const player = getPlayer();
+    const enemyCullDistance = activeCullDistance();
+    for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
+        const enemy = state.enemies[i];
+        if (enemy.kind !== "boss" && distance(enemy, player) > enemyCullDistance) {
+            state.enemies.splice(i, 1);
+        }
+    }
+    while (state.enemies.filter((enemy) => enemy.kind === "boss").length > MAX_BOSSES) {
+        if (!removeFarthestEnemy(player, (enemy) => enemy.kind === "boss"))
+            break;
+    }
+    trimListFromFront(state.projectiles, MAX_PROJECTILES);
+    compactGemsToBudget();
+    trimListFromFront(state.particles, MAX_PARTICLES);
+    trimListFromFront(state.floaters, MAX_FLOATERS);
+    trimListFromFront(state.zones, MAX_ZONES);
+    trimListFromFront(state.mines, MAX_MINES);
+    trimListFromFront(state.beams, MAX_BEAMS);
+    trimListFromFront(state.strikes, MAX_STRIKES);
+    trimListFromFront(state.scythes, MAX_SCYTHES);
+    pruneDistantMapChests();
+    trimChestsToBudget();
+}
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
@@ -2241,48 +2394,48 @@ function findNearestEnemies(origin, count, excludeIds = [], maxDistance = Infini
 }
 function spawnProjectile(projectile) {
     const speedMultiplier = getPassiveStats().attackSpeedMultiplier;
-    state.projectiles.push({
+    pushBounded(state.projectiles, {
         ...projectile,
         vx: projectile.vx * speedMultiplier,
         vy: projectile.vy * speedMultiplier,
         r: projectile.r * getPassiveStats().areaMultiplier,
         pierce: projectile.pierce + getPassiveStats().pierceBonus,
         hitEnemyIds: projectile.hitEnemyIds ?? [],
-    });
+    }, MAX_PROJECTILES);
 }
 function spawnZone(zone) {
-    state.zones.push({
+    pushBounded(state.zones, {
         ...zone,
         radius: scaleArea(zone.radius),
         tickTimer: zone.tickTimer ?? zone.delay,
-    });
+    }, MAX_ZONES);
 }
 function spawnMine(mine) {
-    state.mines.push({
+    pushBounded(state.mines, {
         ...mine,
         radius: scaleArea(mine.radius),
         triggerRadius: scaleArea(mine.triggerRadius),
-    });
+    }, MAX_MINES);
 }
 function spawnBeam(beam) {
-    state.beams.push({
+    pushBounded(state.beams, {
         ...beam,
         length: scaleArea(beam.length),
         width: scaleArea(beam.width),
-    });
+    }, MAX_BEAMS);
 }
 function spawnStrike(strike) {
-    state.strikes.push(strike);
+    pushBounded(state.strikes, strike, MAX_STRIKES);
 }
 function spawnScythe(scythe) {
     const speedMultiplier = getPassiveStats().attackSpeedMultiplier;
-    state.scythes.push({
+    pushBounded(state.scythes, {
         ...scythe,
         vx: scythe.vx * speedMultiplier,
         vy: scythe.vy * speedMultiplier,
         speed: scythe.speed * speedMultiplier,
         r: scaleArea(scythe.r),
-    });
+    }, MAX_SCYTHES);
 }
 function grantGold(amount, origin) {
     const finalAmount = Math.max(0, Math.round(amount * state.goldMultiplier));
@@ -2306,7 +2459,7 @@ function grantRelic(origin, chance = 1) {
     return true;
 }
 function addTextFloater(x, y, value, color = "#f6eedc") {
-    state.floaters.push({
+    pushBounded(state.floaters, {
         x,
         y,
         vx: randomRange(-10, 10),
@@ -2314,7 +2467,7 @@ function addTextFloater(x, y, value, color = "#f6eedc") {
         life: 1.25,
         value,
         color,
-    });
+    }, MAX_FLOATERS);
 }
 function applySlow(enemy, factor, duration) {
     enemy.slowFactor = Math.min(enemy.slowFactor, factor);
@@ -2329,14 +2482,14 @@ function damageEnemy(enemy, amount) {
     const finalAmount = amount * passives.damageMultiplier * (isCritical ? passives.criticalDamageMultiplier : 1);
     enemy.hp -= finalAmount;
     enemy.hitFlash = 1;
-    state.floaters.push({
+    pushBounded(state.floaters, {
         x: enemy.x,
         y: enemy.y - enemy.r,
         vx: randomRange(-8, 8),
         vy: randomRange(-32, -18),
         life: 0.55,
         value: Math.round(finalAmount),
-    });
+    }, MAX_FLOATERS);
     if (isCritical) {
         addParticles(enemy.x, enemy.y, "#f6eedc", 6, enemy.r + 8);
     }
@@ -2383,6 +2536,10 @@ function damageEnemiesAlongLine(origin, direction, length, beamWidth, damage, op
 }
 function spawnEnemy(kind = "shade") {
     const player = getPlayer();
+    if (kind === "boss" && state.enemies.filter((enemy) => enemy.kind === "boss").length >= MAX_BOSSES)
+        return;
+    if (!makeRoomForEnemy(kind, player))
+        return;
     const side = Math.floor(Math.random() * 4);
     const margin = 90;
     const camera = {
@@ -2409,19 +2566,19 @@ function spawnEnemy(kind = "shade") {
         x = camera.left - margin;
         y = randomRange(camera.top, camera.bottom);
     }
-    const minute = state.time / 60;
-    const scale = 1 + minute * 0.42;
+    const scaling = getEnemyStatScaling();
+    const minute = scaling.minute;
     const enemy = {
         id: nextEnemyId,
         x,
         y,
         r: 15,
-        hp: 28 * scale,
-        maxHp: 28 * scale,
+        hp: 28 * scaling.hpMultiplier,
+        maxHp: 28 * scaling.hpMultiplier,
         speed: 72 + minute * 7,
-        damage: 8 + minute * 1.6,
+        damage: 8 * scaling.damageMultiplier,
         color: "#c83f53",
-        xp: 4,
+        xp: 4 * scaling.xpMultiplier,
         hitFlash: 0,
         kind,
         slowTimer: 0,
@@ -2432,30 +2589,30 @@ function spawnEnemy(kind = "shade") {
     nextEnemyId += 1;
     if (kind === "runner") {
         enemy.r = 12;
-        enemy.hp = 18 * scale;
+        enemy.hp = 18 * scaling.hpMultiplier;
         enemy.maxHp = enemy.hp;
         enemy.speed = 122 + minute * 9;
-        enemy.damage = 6 + minute * 1.4;
+        enemy.damage = 6 * scaling.damageMultiplier;
         enemy.color = "#d8b65f";
-        enemy.xp = 3;
+        enemy.xp = 3 * scaling.xpMultiplier;
     }
     if (kind === "brute") {
         enemy.r = 24;
-        enemy.hp = 92 * scale;
+        enemy.hp = 92 * scaling.hpMultiplier;
         enemy.maxHp = enemy.hp;
         enemy.speed = 48 + minute * 5;
-        enemy.damage = 16 + minute * 2;
+        enemy.damage = 16 * scaling.damageMultiplier;
         enemy.color = "#7867c8";
-        enemy.xp = 12;
+        enemy.xp = 12 * scaling.xpMultiplier;
     }
     if (kind === "boss") {
         enemy.r = 38;
-        enemy.hp = 520 * scale;
+        enemy.hp = 520 * scaling.hpMultiplier;
         enemy.maxHp = enemy.hp;
         enemy.speed = 36 + minute * 3.5;
-        enemy.damage = 24 + minute * 3;
+        enemy.damage = 24 * scaling.damageMultiplier;
         enemy.color = "#ff7a45";
-        enemy.xp = 40;
+        enemy.xp = 40 * scaling.xpMultiplier;
     }
     state.enemies.push(enemy);
 }
@@ -2482,7 +2639,12 @@ function getMoveVector() {
 function update(dt) {
     if (state.mode !== "playing")
         return;
-    state.time += dt;
+    state.time = Math.min(RUN_DURATION_SECONDS, state.time + dt);
+    if (state.time >= RUN_DURATION_SECONDS) {
+        updateHud();
+        endRun();
+        return;
+    }
     state.shake = Math.max(0, state.shake - dt * 18);
     updatePlayer(dt);
     updateSpawns(dt);
@@ -2496,6 +2658,7 @@ function update(dt) {
     updateEnemies(dt);
     updateGems(dt);
     updateParticles(dt);
+    enforceEntityBudgets();
     updateHud();
     if (getPlayer().hp <= 0) {
         endRun();
@@ -2504,13 +2667,13 @@ function update(dt) {
 function updatePlayer(dt) {
     const player = getPlayer();
     const move = getMoveVector();
-    player.x = clamp(player.x + move.x * player.speed * dt, -WORLD / 2, WORLD / 2);
-    player.y = clamp(player.y + move.y * player.speed * dt, -WORLD / 2, WORLD / 2);
+    player.x += move.x * player.speed * dt;
+    player.y += move.y * player.speed * dt;
     player.hurtFlash = Math.max(0, player.hurtFlash - dt * 5);
 }
 function updateSpawns(dt) {
     const minute = state.time / 60;
-    const cap = Math.min(240, 55 + Math.floor(state.time * 1.1));
+    const cap = Math.min(MAX_ENEMIES, 55 + Math.floor(state.time * 1.1));
     state.spawnTimer -= dt;
     state.eliteTimer -= dt;
     state.bossTimer -= dt;
@@ -2543,18 +2706,19 @@ function updateSpawns(dt) {
 function spawnInitialChests() {
     const kinds = ["cache", "blood", "hunt", "astral"];
     kinds.forEach((kind) => {
-        spawnChestAt(randomRange(-WORLD / 2 + 380, WORLD / 2 - 380), randomRange(-WORLD / 2 + 380, WORLD / 2 - 380), kind, "map", 1);
+        spawnChestAt(randomRange(-INITIAL_CHEST_SPREAD, INITIAL_CHEST_SPREAD), randomRange(-INITIAL_CHEST_SPREAD, INITIAL_CHEST_SPREAD), kind, "map", 1);
     });
 }
 function spawnRandomMapChest() {
+    pruneDistantMapChests();
     if (state.chests.filter((chest) => chest.source === "map").length >= 4)
         return;
     const player = getPlayer();
     const kinds = ["cache", "blood", "hunt", "astral"];
     const angle = randomRange(0, TAU);
     const distanceFromPlayer = randomRange(520, 1100);
-    const x = clamp(player.x + Math.cos(angle) * distanceFromPlayer, -WORLD / 2 + 240, WORLD / 2 - 240);
-    const y = clamp(player.y + Math.sin(angle) * distanceFromPlayer, -WORLD / 2 + 240, WORLD / 2 - 240);
+    const x = player.x + Math.cos(angle) * distanceFromPlayer;
+    const y = player.y + Math.sin(angle) * distanceFromPlayer;
     spawnChestAt(x, y, kinds[Math.floor(Math.random() * kinds.length)], "map", 1);
 }
 function spawnRewardChest(x, y, source, tier) {
@@ -2582,6 +2746,7 @@ function spawnChestAt(x, y, kind, source, rewardTier) {
         pulse: randomRange(0, TAU),
     });
     nextChestId += 1;
+    trimChestsToBudget();
 }
 function updateChests(dt) {
     const player = getPlayer();
@@ -2849,7 +3014,7 @@ function updateScythes(dt) {
                 const result = damageEnemy(enemy, scythe.damage);
                 if (scythe.markDamage && !result.killed && enemy.hp > 0) {
                     damageEnemy(enemy, scythe.markDamage);
-                    state.strikes.push({
+                    spawnStrike({
                         fromX: enemy.x - scythe.vx * 0.04,
                         fromY: enemy.y - scythe.vy * 0.04,
                         toX: enemy.x,
@@ -2962,7 +3127,7 @@ function killEnemy(index, enemy) {
     creditChestKill(enemy);
     const gemCount = enemy.kind === "boss" ? 10 : enemy.kind === "brute" ? 4 : 1;
     for (let i = 0; i < gemCount; i += 1) {
-        state.gems.push({
+        spawnGem({
             x: enemy.x + randomRange(-12, 12),
             y: enemy.y + randomRange(-12, 12),
             r: enemy.kind === "brute" ? 7 : 5,
@@ -2973,7 +3138,7 @@ function killEnemy(index, enemy) {
     if (enemy.bonusXp > 0) {
         const bonusGemCount = enemy.kind === "brute" ? 2 : 1;
         for (let i = 0; i < bonusGemCount; i += 1) {
-            state.gems.push({
+            spawnGem({
                 x: enemy.x + randomRange(-18, 18),
                 y: enemy.y + randomRange(-18, 18),
                 r: enemy.kind === "brute" ? 7 : 5,
@@ -3083,7 +3248,8 @@ function makeUpgradeChoices() {
     return [...choices].sort(() => Math.random() - 0.5).slice(0, 3);
 }
 function addParticles(x, y, color, count, radius = 20) {
-    for (let i = 0; i < count; i += 1) {
+    const spawnCount = reserveListSpace(state.particles, MAX_PARTICLES, count);
+    for (let i = 0; i < spawnCount; i += 1) {
         const angle = randomRange(0, TAU);
         const speed = randomRange(30, 180);
         state.particles.push({
@@ -3204,34 +3370,46 @@ function drawWorld(camera) {
         ctx.lineTo(width, Math.floor(y - camera.y));
         ctx.stroke();
     }
-    floorMarks.forEach((mark) => {
-        const sx = mark.x - camera.x;
-        const sy = mark.y - camera.y;
-        if (sx < -80 || sy < -80 || sx > width + 80 || sy > height + 80)
-            return;
-        ctx.save();
-        ctx.translate(sx, sy);
-        ctx.rotate(mark.rot);
-        if (mark.kind === "rune") {
-            ctx.strokeStyle = "rgba(66,185,154,0.11)";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(0, 0, mark.size * 0.55, 0, TAU);
-            ctx.moveTo(-mark.size * 0.32, 0);
-            ctx.lineTo(mark.size * 0.32, 0);
-            ctx.moveTo(0, -mark.size * 0.32);
-            ctx.lineTo(0, mark.size * 0.32);
-            ctx.stroke();
+    const firstMarkCellX = Math.floor(camera.x / FLOOR_REPEAT_SIZE) - 1;
+    const lastMarkCellX = Math.floor((camera.x + width) / FLOOR_REPEAT_SIZE) + 1;
+    const firstMarkCellY = Math.floor(camera.y / FLOOR_REPEAT_SIZE) - 1;
+    const lastMarkCellY = Math.floor((camera.y + height) / FLOOR_REPEAT_SIZE) + 1;
+    for (let cellX = firstMarkCellX; cellX <= lastMarkCellX; cellX += 1) {
+        for (let cellY = firstMarkCellY; cellY <= lastMarkCellY; cellY += 1) {
+            const offsetX = cellX * FLOOR_REPEAT_SIZE;
+            const offsetY = cellY * FLOOR_REPEAT_SIZE;
+            floorMarks.forEach((mark) => {
+                const sx = offsetX + mark.x - camera.x;
+                const sy = offsetY + mark.y - camera.y;
+                if (sx < -80 || sy < -80 || sx > width + 80 || sy > height + 80)
+                    return;
+                ctx.save();
+                ctx.translate(sx, sy);
+                ctx.rotate(mark.rot);
+                if (mark.kind === "rune") {
+                    ctx.strokeStyle = "rgba(66,185,154,0.11)";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, mark.size * 0.55, 0, TAU);
+                    ctx.moveTo(-mark.size * 0.32, 0);
+                    ctx.lineTo(mark.size * 0.32, 0);
+                    ctx.moveTo(0, -mark.size * 0.32);
+                    ctx.lineTo(0, mark.size * 0.32);
+                    ctx.stroke();
+                }
+                else {
+                    ctx.fillStyle = "rgba(238,221,178,0.045)";
+                    ctx.fillRect(-mark.size / 2, -2, mark.size, 4);
+                }
+                ctx.restore();
+            });
         }
-        else {
-            ctx.fillStyle = "rgba(238,221,178,0.045)";
-            ctx.fillRect(-mark.size / 2, -2, mark.size, 4);
-        }
-        ctx.restore();
-    });
+    }
 }
 function drawZones(camera) {
     state.zones.forEach((zone) => {
+        if (!isVisibleCircle(zone, camera, zone.radius))
+            return;
         const visibleRatio = clamp(zone.life / zone.maxLife, 0, 1);
         ctx.save();
         ctx.globalAlpha = zone.delay > 0 ? 0.28 : 0.18 + visibleRatio * 0.22;
@@ -3250,6 +3428,8 @@ function drawZones(camera) {
 }
 function drawMines(camera) {
     state.mines.forEach((mine) => {
+        if (!isVisibleCircle(mine, camera, mine.triggerRadius))
+            return;
         ctx.save();
         ctx.translate(mine.x - camera.x, mine.y - camera.y);
         ctx.strokeStyle = mine.color;
@@ -3268,6 +3448,8 @@ function drawMines(camera) {
 }
 function drawChests(camera) {
     state.chests.forEach((chest) => {
+        if (!isVisibleCircle(chest, camera, chest.unlockRadius + 28))
+            return;
         const x = chest.x - camera.x;
         const y = chest.y - camera.y;
         const color = chestColor(chest.kind);
@@ -3334,6 +3516,8 @@ function drawPlayer(camera) {
 }
 function drawEnemies(camera) {
     state.enemies.forEach((enemy) => {
+        if (!isVisibleCircle(enemy, camera, enemy.r + 18))
+            return;
         const x = enemy.x - camera.x;
         const y = enemy.y - camera.y;
         ctx.save();
@@ -3388,6 +3572,8 @@ function roundedPoly(radius, sides) {
 }
 function drawProjectiles(camera) {
     state.projectiles.forEach((bullet) => {
+        if (!isVisibleCircle(bullet, camera, bullet.r + 16))
+            return;
         const x = bullet.x - camera.x;
         const y = bullet.y - camera.y;
         ctx.save();
@@ -3403,6 +3589,8 @@ function drawProjectiles(camera) {
 }
 function drawScythes(camera) {
     state.scythes.forEach((scythe) => {
+        if (!isVisibleCircle(scythe, camera, scythe.r + 24))
+            return;
         ctx.save();
         ctx.translate(scythe.x - camera.x, scythe.y - camera.y);
         ctx.rotate(scythe.angle + scythe.spin);
@@ -3461,6 +3649,8 @@ function drawStrikes(camera) {
 }
 function drawGems(camera) {
     state.gems.forEach((gem) => {
+        if (!isVisibleCircle(gem, camera, gem.r + 18))
+            return;
         const x = gem.x - camera.x;
         const y = gem.y - camera.y + Math.sin(gem.bob) * 3;
         ctx.save();
@@ -3480,6 +3670,8 @@ function drawWeapons(camera) {
 }
 function drawParticles(camera) {
     state.particles.forEach((particle) => {
+        if (!isVisibleCircle(particle, camera, particle.r))
+            return;
         const alpha = clamp(particle.life / (particle.maxLife ?? 0.72), 0, 1);
         ctx.globalAlpha = alpha;
         ctx.fillStyle = particle.color;
@@ -3495,6 +3687,8 @@ function drawFloaters(camera) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     state.floaters.forEach((floater) => {
+        if (!isVisibleCircle(floater, camera, 24))
+            return;
         ctx.globalAlpha = clamp(floater.life / 0.55, 0, 1);
         ctx.fillStyle = floater.color ?? "#f6eedc";
         ctx.fillText(String(floater.value), floater.x - camera.x, floater.y - camera.y);
