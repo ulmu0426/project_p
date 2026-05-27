@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nightfall Survivors</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="game-shell" aria-label="Nightfall Survivors">
+      <canvas id="game" aria-label="Game field"></canvas>
+
+      <section class="hud" aria-label="Run status">
+        <div class="hud-top">
+          <div class="run-title">Nightfall Survivors</div>
+          <div class="hud-metrics">
+            <span id="timeValue">00:00</span>
+            <span id="levelValue">Lv 1</span>
+            <span id="killValue">0 KO</span>
+          </div>
+          <button class="icon-button" id="pauseButton" aria-label="Pause">
+            <span class="pause-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div class="bars">
+          <div class="bar health" aria-label="Health">
+            <span id="healthFill"></span>
+          </div>
+          <div class="bar xp" aria-label="Experience">
+            <span id="xpFill"></span>
+          </div>
+        </div>
+
+        <div class="weapon-rail" id="weaponRail" aria-label="Weapons"></div>
+      </section>
+
+      <section class="overlay is-visible" id="menuPanel" aria-label="Main menu">
+        <div class="menu-stack main-menu-view" id="mainMenuView">
+          <p class="eyebrow">Arcade survival</p>
+          <h1>Nightfall Survivors</h1>
+          <div class="profile-strip">
+            <span>Gold</span>
+            <strong id="walletGold">0</strong>
+          </div>
+          <div class="menu-actions stacked">
+            <button class="primary-button" id="openCharacterButton">
+              <span class="play-icon" aria-hidden="true"></span>
+              Start Run
+            </button>
+            <button class="secondary-button" id="openShopButton">Shop</button>
+            <button class="secondary-button" disabled>Collection</button>
+          </div>
+        </div>
+
+        <div class="menu-stack character-menu-view" id="characterMenuView" hidden>
+          <p class="eyebrow">Choose survivor</p>
+          <h2>Ready the run</h2>
+          <section class="character-select" aria-labelledby="characterSelectTitle">
+            <div class="character-select-header">
+              <h2 id="characterSelectTitle">Choose survivor</h2>
+              <span>6 roster</span>
+            </div>
+            <div class="character-grid" id="characterGrid" role="group" aria-label="Survivor roster"></div>
+          </section>
+          <div class="menu-actions">
+            <button class="secondary-button" id="characterBackButton">Back</button>
+            <button class="primary-button" id="startButton">
+              <span class="play-icon" aria-hidden="true"></span>
+              Start Run
+            </button>
+          </div>
+        </div>
+
+        <section class="shop-stack" id="shopView" hidden aria-label="Shop">
+          <div class="shop-header">
+            <div>
+              <p class="eyebrow">Nightfall shop</p>
+              <h2>Permanent upgrades</h2>
+            </div>
+            <div class="shop-wallet">
+              <span>Gold</span>
+              <strong id="shopGold">0</strong>
+            </div>
+            <button class="secondary-button" id="shopBackButton">Back</button>
+          </div>
+          <div class="shop-tabs" id="shopTabs" role="tablist" aria-label="Shop categories">
+            <button type="button" data-shop-category="corePercent" aria-selected="true">Core %</button>
+            <button type="button" data-shop-category="flatBonus">Flat Bonus</button>
+            <button type="button" data-shop-category="utility">Utility</button>
+            <button type="button" data-shop-category="unlocks">Unlocks</button>
+            <button type="button" data-shop-category="runPrep">Run Prep</button>
+          </div>
+          <div class="shop-summary" id="shopSummary"></div>
+          <div class="shop-layout">
+            <div class="shop-list" id="shopUpgradeList" role="list"></div>
+            <aside class="shop-detail" id="shopUpgradeDetail" aria-live="polite"></aside>
+          </div>
+        </section>
+
+        <div class="menu-stack compact" id="pauseMenuView" hidden>
+          <p class="eyebrow">Paused</p>
+          <h2>Nightfall Survivors</h2>
+          <button class="primary-button" id="resumeButton">Resume</button>
+        </div>
+      </section>
+
+      <section class="upgrade-panel" id="upgradePanel" hidden aria-label="Level rewards">
+        <div class="upgrade-shell">
+          <p class="eyebrow">Level up</p>
+          <h2>Choose a boon</h2>
+          <div class="upgrade-grid" id="upgradeGrid"></div>
+          <div class="upgrade-actions">
+            <button class="secondary-button" id="rerollButton" type="button">Reroll 0</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="overlay" id="gameOverPanel" aria-label="Run complete">
+        <div class="menu-stack compact">
+          <p class="eyebrow">Run complete</p>
+          <h2 id="finalTime">00:00</h2>
+          <div class="result-row">
+            <span id="finalLevel">Lv 1</span>
+            <span id="finalKills">0 KO</span>
+          </div>
+          <div class="result-row">
+            <span id="finalGold">+0g banked</span>
+          </div>
+          <section class="character-select compact" aria-labelledby="gameOverCharacterSelectTitle">
+            <div class="character-select-header">
+              <h2 id="gameOverCharacterSelectTitle">Choose survivor</h2>
+              <span>6 roster</span>
+            </div>
+            <div
+              class="character-grid compact"
+              id="gameOverCharacterGrid"
+              role="group"
+              aria-label="Survivor roster for restart"
+            ></div>
+          </section>
+          <button class="primary-button" id="restartButton">
+            <span class="play-icon" aria-hidden="true"></span>
+            Restart
+          </button>
+        </div>
+      </section>
+
+      <div class="touch-stick" id="touchStick" aria-hidden="true">
+        <span></span>
+      </div>
+    </main>
+
+    <script src="dist/game.js"></script>
+  </body>
+</html>
