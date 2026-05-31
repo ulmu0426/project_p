@@ -90,6 +90,7 @@ button {
 
 .hud-metrics,
 .weapon-rail,
+.passive-rail,
 .result-row {
   display: flex;
   align-items: center;
@@ -97,8 +98,47 @@ button {
   flex-wrap: wrap;
 }
 
+.skill-rails {
+  width: min(760px, calc(100vw - 32px));
+  display: grid;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.skill-rail-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.rail-label {
+  color: rgba(246, 238, 220, 0.64);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-shadow: 0 2px 8px var(--shadow);
+}
+
+.weapon-rail {
+  max-width: min(720px, calc(100vw - 32px));
+}
+
+.weapon-rail,
+.passive-rail {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  pointer-events: auto;
+  scrollbar-width: thin;
+  touch-action: pan-x;
+}
+
 .hud-metrics span,
 .weapon-pill,
+.passive-pill,
 .result-row span {
   min-height: 32px;
   display: inline-flex;
@@ -116,11 +156,66 @@ button {
   backdrop-filter: blur(14px);
 }
 
-.weapon-pill {
+.weapon-pill,
+.passive-pill {
+  position: relative;
   min-height: 30px;
   gap: 7px;
   padding: 0 9px 0 8px;
   color: rgba(246, 238, 220, 0.92);
+}
+
+.weapon-pill {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  padding: 4px;
+  overflow: visible;
+}
+
+.weapon-sprite,
+.choice-weapon-sprite {
+  display: block;
+  background-image: var(--sprite-image);
+  background-position: var(--sprite-position);
+  background-repeat: no-repeat;
+  background-size: 400% 300%;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--skill-color, #d8b65f) 52%, transparent));
+}
+
+.weapon-sprite {
+  width: 36px;
+  height: 36px;
+}
+
+.weapon-level-badge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(246, 238, 220, 0.42);
+  border-radius: 50%;
+  background: rgba(14, 12, 10, 0.92);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  box-shadow: 0 6px 18px var(--shadow);
+}
+
+.weapon-pill.is-evolved {
+  border-color: var(--skill-color);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(20, 18, 15, 0.72)),
+    rgba(20, 18, 15, 0.78);
+  box-shadow:
+    0 0 0 1px var(--skill-color),
+    0 0 22px var(--skill-color),
+    0 10px 30px var(--shadow);
 }
 
 .weapon-dot {
@@ -129,6 +224,103 @@ button {
   border-radius: 50%;
   background: var(--gold);
   box-shadow: 0 0 16px currentColor;
+}
+
+.passive-pill {
+  border-color: rgba(66, 185, 154, 0.36);
+  color: rgba(201, 245, 232, 0.94);
+  background: rgba(22, 34, 30, 0.76);
+}
+
+.passive-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #42b99a;
+  box-shadow: 0 0 14px rgba(66, 185, 154, 0.8);
+}
+
+.relic-rail {
+  position: absolute;
+  top: 96px;
+  right: 16px;
+  width: min(260px, calc(100vw - 32px));
+  max-height: calc(100svh - 112px);
+  display: none;
+  gap: 8px;
+  overflow-y: auto;
+  pointer-events: auto;
+  scrollbar-width: thin;
+  z-index: 6;
+}
+
+.relic-rail.is-visible {
+  display: grid;
+}
+
+.relic-pill {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--relic-color) 48%, transparent);
+  border-radius: 8px;
+  background: rgba(20, 18, 15, 0.78);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 12px 28px var(--shadow),
+    0 0 18px color-mix(in srgb, var(--relic-color) 18%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.relic-dot {
+  grid-row: 1 / span 2;
+  width: 10px;
+  height: 10px;
+  align-self: start;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 16px currentColor;
+}
+
+.relic-pill strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.relic-pill em {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.detail-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 8px 10px;
+  border: 1px solid rgba(238, 221, 178, 0.22);
+  border-radius: 8px;
+  background: rgba(18, 16, 13, 0.96);
+  box-shadow: 0 14px 32px var(--shadow);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  pointer-events: none;
+  white-space: normal;
+  backdrop-filter: blur(14px);
 }
 
 .bars {
@@ -217,6 +409,7 @@ button {
 .upgrade-panel {
   position: absolute;
   inset: 0;
+  z-index: 20;
   display: none;
   place-items: center;
   padding: 24px;
@@ -797,6 +990,32 @@ h2 {
   text-transform: uppercase;
 }
 
+.upgrade-card.has-weapon-sprite {
+  grid-template-columns: 74px minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  align-items: center;
+}
+
+.upgrade-card.has-weapon-sprite small {
+  grid-column: 1 / -1;
+}
+
+.choice-weapon-sprite {
+  grid-column: 1;
+  grid-row: 2 / span 2;
+  width: 66px;
+  height: 66px;
+  align-self: center;
+  border: 1px solid rgba(238, 221, 178, 0.16);
+  border-radius: 8px;
+  background-color: rgba(12, 10, 8, 0.28);
+}
+
+.upgrade-card.has-weapon-sprite strong,
+.upgrade-card.has-weapon-sprite p {
+  grid-column: 2;
+}
+
 .touch-stick {
   position: absolute;
   left: 0;
@@ -852,8 +1071,30 @@ h2 {
     width: calc(100vw - 20px);
   }
 
-  .weapon-rail {
+  .skill-rails,
+  .weapon-rail,
+  .passive-rail {
     max-width: calc(100vw - 20px);
+  }
+
+  .skill-rail-row {
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .rail-label {
+    font-size: 10px;
+  }
+
+  .relic-rail {
+    top: 154px;
+    right: 10px;
+    width: min(220px, calc(100vw - 20px));
+    max-height: calc(100svh - 164px);
+  }
+
+  .relic-pill {
+    padding: 8px;
   }
 
   .overlay,

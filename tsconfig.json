@@ -12,5 +12,20 @@
     "removeComments": true,
     "outFile": "dist/game.js"
   },
-  "include": ["src/**/*.ts"]
+  "files": [
+    "src/types.ts",
+    "src/assets.ts",
+    "src/dom.ts",
+    "src/runtime.ts",
+    "src/data/characters.ts",
+    "src/data/shop.ts",
+    "src/context.ts",
+    "src/data/catalogs.ts",
+    "src/weapons.ts",
+    "src/systems/core.ts",
+    "src/systems/spawning.ts",
+    "src/systems/update.ts",
+    "src/systems/render.ts",
+    "src/game.ts"
+  ]
 }

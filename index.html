@@ -32,8 +32,20 @@
           </div>
         </div>
 
-        <div class="weapon-rail" id="weaponRail" aria-label="Weapons"></div>
+        <div class="skill-rails" aria-label="Skills">
+          <div class="skill-rail-row">
+            <span class="rail-label">Weapons</span>
+            <div class="weapon-rail" id="weaponRail" aria-label="Weapons"></div>
+          </div>
+          <div class="skill-rail-row">
+            <span class="rail-label">Passives</span>
+            <div class="passive-rail" id="passiveRail" aria-label="Passives"></div>
+          </div>
+        </div>
       </section>
+
+      <aside class="relic-rail" id="relicRail" aria-label="Relics"></aside>
+      <div class="detail-tooltip" id="detailTooltip" role="tooltip" hidden></div>
 
       <section class="overlay is-visible" id="menuPanel" aria-label="Main menu">
         <div class="menu-stack main-menu-view" id="mainMenuView">

@@ -1,4 +1,97 @@
 "use strict";
+const characterAtlas = createSpriteAtlas("assets/sprite-atlas-characters.png", 4, 3);
+const weaponEffectAtlasSource = "assets/sprite-atlas-weapons.png";
+const projectileAtlasSource = "assets/sprite-atlas-projectiles.png";
+const weaponEffectAtlas = createSpriteAtlas(weaponEffectAtlasSource, 4, 3);
+const projectileAtlas = createSpriteAtlas(projectileAtlasSource, 4, 3);
+const characterSpriteCells = {
+    hunter: { col: 0, row: 0 },
+    vessel: { col: 1, row: 0 },
+    archivist: { col: 2, row: 0 },
+    bellkeeper: { col: 3, row: 0 },
+    duelist: { col: 0, row: 1 },
+    warden: { col: 1, row: 1 },
+};
+const enemySpriteCells = {
+    shade: { col: 2, row: 1 },
+    runner: { col: 3, row: 1 },
+    brute: { col: 0, row: 2 },
+    boss: { col: 1, row: 2 },
+};
+const weaponEffectSpriteCells = {
+    silverBolt: { col: 0, row: 0 },
+    moonKnives: { col: 1, row: 0 },
+    emberRite: { col: 2, row: 0 },
+    graveLantern: { col: 3, row: 0 },
+    ricochetCrossbow: { col: 0, row: 1 },
+    frostSigil: { col: 1, row: 1 },
+    thunderCharm: { col: 2, row: 1 },
+    bloodBats: { col: 3, row: 1 },
+    sunSpear: { col: 0, row: 2 },
+    thornMines: { col: 1, row: 2 },
+    voidBell: { col: 2, row: 2 },
+    reaperScythe: { col: 3, row: 2 },
+};
+const projectileSpriteCells = {
+    silverBolt: { col: 0, row: 0 },
+    ricochetCrossbow: { col: 0, row: 1 },
+    bloodBats: { col: 3, row: 1 },
+    reaperScythe: { col: 3, row: 2 },
+};
+function hasWeaponEffectSprite(id) {
+    return id in weaponEffectSpriteCells;
+}
+function weaponEffectSpriteInlineStyle(weaponId) {
+    return atlasSpriteInlineStyle(weaponEffectAtlasSource, weaponEffectAtlas, weaponEffectSpriteCells[weaponId]);
+}
+function applyWeaponEffectSpriteStyle(element, weaponId) {
+    applyAtlasSpriteStyle(element, weaponEffectAtlasSource, weaponEffectAtlas, weaponEffectSpriteCells[weaponId]);
+}
+function createSpriteAtlas(src, columns, rows) {
+    const image = new Image();
+    const atlas = {
+        image,
+        columns,
+        rows,
+        loaded: false,
+    };
+    image.addEventListener("load", () => {
+        atlas.loaded = true;
+    });
+    image.src = src;
+    return atlas;
+}
+function canDrawAtlas(atlas) {
+    return atlas.loaded && atlas.image.naturalWidth > 0 && atlas.image.naturalHeight > 0;
+}
+function atlasSpritePosition(atlas, cell) {
+    const x = atlas.columns <= 1 ? 0 : (cell.col / (atlas.columns - 1)) * 100;
+    const y = atlas.rows <= 1 ? 0 : (cell.row / (atlas.rows - 1)) * 100;
+    return `${x}% ${y}%`;
+}
+function atlasSpriteInlineStyle(source, atlas, cell) {
+    return `--sprite-image:url(${source});--sprite-position:${atlasSpritePosition(atlas, cell)};`;
+}
+function applyAtlasSpriteStyle(element, source, atlas, cell) {
+    element.style.setProperty("--sprite-image", `url(${source})`);
+    element.style.setProperty("--sprite-position", atlasSpritePosition(atlas, cell));
+}
+function drawAtlasCell(atlas, cell, x, y, width, height) {
+    if (!canDrawAtlas(atlas))
+        return false;
+    const cellWidth = atlas.image.naturalWidth / atlas.columns;
+    const cellHeight = atlas.image.naturalHeight / atlas.rows;
+    ctx.drawImage(atlas.image, cell.col * cellWidth, cell.row * cellHeight, cellWidth, cellHeight, x - width / 2, y - height / 2, width, height);
+    return true;
+}
+function drawProjectileSprite(weaponId, size) {
+    if (!weaponId)
+        return false;
+    const cell = projectileSpriteCells[weaponId];
+    if (!cell)
+        return false;
+    return drawAtlasCell(projectileAtlas, cell, 0, 0, size, size);
+}
 const canvas = mustElement("game", HTMLCanvasElement);
 const renderContext = canvas.getContext("2d");
 if (!renderContext) {
@@ -14,6 +107,9 @@ const ui = {
     health: mustElement("healthFill", HTMLSpanElement),
     xp: mustElement("xpFill", HTMLSpanElement),
     rail: mustElement("weaponRail", HTMLDivElement),
+    passiveRail: mustElement("passiveRail", HTMLDivElement),
+    relicRail: mustElement("relicRail", HTMLElement),
+    detailTooltip: mustElement("detailTooltip", HTMLDivElement),
     menu: menuPanel,
     mainMenuView: mustElement("mainMenuView", HTMLDivElement),
     characterMenuView: mustElement("characterMenuView", HTMLDivElement),
@@ -707,6 +803,8 @@ function createSilverBoltDefinition() {
                                 life: weapon.evolved ? 1.45 : 1.25,
                                 pierce: weapon.evolved ? 2 : weapon.level >= 5 ? 1 : 0,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                                 onHit: weapon.evolved
                                     ? (enemy, projectile, gameOnHit) => {
                                         const shardTargets = gameOnHit.findNearestEnemies(enemy, 2, projectile.hitEnemyIds, gameOnHit.area(280));
@@ -724,6 +822,8 @@ function createSilverBoltDefinition() {
                                                 pierce: 0,
                                                 color: weapon.color,
                                                 hitEnemyIds: [enemy.id],
+                                                sourceWeaponId: weapon.id,
+                                                evolved: weapon.evolved,
                                             });
                                         });
                                     }
@@ -913,6 +1013,8 @@ function createEmberRiteDefinition() {
                                 tickTimer: 0,
                                 delay: 0,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                             });
                         }
                     });
@@ -1107,6 +1209,8 @@ function createRicochetCrossbowDefinition() {
                                 bounces: weapon.evolved ? stats.bounces + 1 : stats.bounces,
                                 bounceRange: stats.range,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                                 onHit: weapon.evolved
                                     ? (enemy, projectile, gameOnHit) => {
                                         const mirrorTargets = gameOnHit.findNearestEnemies(enemy, 2, projectile.hitEnemyIds, stats.range);
@@ -1123,6 +1227,8 @@ function createRicochetCrossbowDefinition() {
                                                 life: 1.2,
                                                 pierce: 0,
                                                 bounces: 1,
+                                                sourceWeaponId: weapon.id,
+                                                evolved: weapon.evolved,
                                                 bounceRange: stats.range * 0.65,
                                                 color: weapon.color,
                                                 hitEnemyIds: [enemy.id],
@@ -1209,6 +1315,8 @@ function createFrostSigilDefinition() {
                                 tick: activeGame.cooldown(stats.tick),
                                 delay: 0.28,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                                 slowFactor: stats.slowFactor,
                                 slowDuration: stats.slowDuration,
                                 onHit: weapon.evolved
@@ -1291,6 +1399,8 @@ function createThunderCharmDefinition() {
                                 life: 0.18,
                                 maxLife: 0.18,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                             });
                             activeGame.damageEnemy(next, stats.damage);
                             activeGame.addParticles(next.x, next.y, weapon.color, 8);
@@ -1305,6 +1415,8 @@ function createThunderCharmDefinition() {
                                     life: 0.16,
                                     maxLife: 0.16,
                                     color: weapon.color,
+                                    sourceWeaponId: weapon.id,
+                                    evolved: weapon.evolved,
                                 });
                                 activeGame.damageEnemy(bonusTarget, stats.damage * 0.72);
                                 activeGame.addParticles(bonusTarget.x, bonusTarget.y, weapon.color, 6);
@@ -1391,6 +1503,8 @@ function createBloodBatsDefinition() {
                                 targetId: target?.id,
                                 homing: stats.homing,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                                 onHit: weapon.evolved
                                     ? (enemy, _projectile, gameOnHit, result) => {
                                         const player = gameOnHit.player();
@@ -1412,6 +1526,8 @@ function createBloodBatsDefinition() {
                                                 targetId: nextTarget?.id,
                                                 homing: stats.homing,
                                                 color: weapon.color,
+                                                sourceWeaponId: weapon.id,
+                                                evolved: weapon.evolved,
                                             });
                                         }
                                     }
@@ -1507,6 +1623,8 @@ function createSunSpearDefinition() {
                                 life: 0.22,
                                 maxLife: 0.22,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                             });
                         }
                     });
@@ -1580,6 +1698,8 @@ function createThornMinesDefinition() {
                             life: stats.life,
                             armedAfter: 0.18,
                             color: weapon.color,
+                            sourceWeaponId: weapon.id,
+                            evolved: weapon.evolved,
                             gemVacuumRadius: weapon.evolved ? stats.radius * 2.4 : undefined,
                             gemBonusDamage: weapon.evolved ? 7 : undefined,
                         });
@@ -1668,6 +1788,8 @@ function createVoidBellDefinition() {
                                 tickTimer: 0,
                                 delay: 0.34,
                                 color: weapon.color,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                                 onHit: (enemy, gameOnHit) => {
                                     const pull = gameOnHit.normalize(player.x - enemy.x, player.y - enemy.y);
                                     enemy.x += pull.x * 36;
@@ -1775,6 +1897,8 @@ function createReaperScytheDefinition() {
                                 color: weapon.color,
                                 hitEnemyIds: [],
                                 markDamage: weapon.evolved ? stats.damage * 0.36 : undefined,
+                                sourceWeaponId: weapon.id,
+                                evolved: weapon.evolved,
                             });
                         }
                     });
@@ -1908,6 +2032,7 @@ function renderWallets() {
     ui.shopGold.textContent = String(profile.gold);
 }
 function showMenuView(view) {
+    hideDetailTooltip();
     currentMenuView = view;
     ui.mainMenuView.hidden = view !== "main";
     ui.characterMenuView.hidden = view !== "character";
@@ -2051,22 +2176,41 @@ function recordPassive(passiveId) {
     state.passiveLevels[passiveId] = getPassiveLevel(passiveId) + 1;
     return true;
 }
+function hasReadyWeaponEvolution() {
+    return state.weapons.some((weapon) => !weapon.evolved && weapon.level >= weapon.maxLevel && hasPassive(weapon.evolution.requiredPassive));
+}
+function getReadyEvolutionWeapons() {
+    return state.weapons.filter((weapon) => !weapon.evolved && weapon.level >= weapon.maxLevel && hasPassive(weapon.evolution.requiredPassive));
+}
+function evolveWeapon(weapon, origin) {
+    weapon.evolved = true;
+    weapon.name = weapon.evolution.name;
+    weapon.color = weapon.evolution.color;
+    weapon.evolution.evolve(weapon, game);
+    const effectOrigin = origin ?? state.player;
+    if (effectOrigin) {
+        addParticles(effectOrigin.x, effectOrigin.y, weapon.color, 44, 96);
+        addTextFloater(effectOrigin.x, effectOrigin.y - 34, `${weapon.name} Awakened`, weapon.color);
+        state.shake = Math.max(state.shake, 5);
+    }
+}
+function evolveRandomReadyWeapon(origin) {
+    const candidates = getReadyEvolutionWeapons();
+    if (candidates.length === 0)
+        return false;
+    const weapon = candidates[Math.floor(Math.random() * candidates.length)];
+    evolveWeapon(weapon, origin);
+    updateHud(true);
+    return true;
+}
 function evolveReadyWeapons() {
     let evolvedAny = false;
-    state.weapons.forEach((weapon) => {
-        if (weapon.evolved || weapon.level < weapon.maxLevel || !hasPassive(weapon.evolution.requiredPassive))
-            return;
-        weapon.evolved = true;
-        weapon.name = weapon.evolution.name;
-        weapon.color = weapon.evolution.color;
-        weapon.evolution.evolve(weapon, game);
+    getReadyEvolutionWeapons().forEach((weapon) => {
+        evolveWeapon(weapon);
         evolvedAny = true;
-        const player = state.player;
-        if (player) {
-            addParticles(player.x, player.y, weapon.color, 44, 96);
-            state.shake = Math.max(state.shake, 5);
-        }
     });
+    if (evolvedAny)
+        updateHud(true);
     return evolvedAny;
 }
 function scaleCooldown(base) {
@@ -2146,6 +2290,7 @@ function renderCharacterGrid(container) {
     });
 }
 function resetRun() {
+    hideDetailTooltip();
     const character = getSelectedCharacter();
     const baseMaxHp = Math.round(BASE_MAX_HP * character.baseHealthMultiplier * (1 + getShopValue("vitalityTraining")));
     const passives = createDefaultPassiveStats();
@@ -2456,6 +2601,7 @@ function grantRelic(origin, chance = 1) {
     relic.apply(game);
     addTextFloater(origin.x, origin.y - 34, relic.title, relic.color);
     addParticles(origin.x, origin.y, relic.color, 34, 76);
+    updateHud(true);
     return true;
 }
 function addTextFloater(x, y, value, color = "#f6eedc") {
@@ -2809,6 +2955,9 @@ function openChest(index, chest) {
 function grantChestReward(chest) {
     const tier = chest.rewardTier;
     const origin = { x: chest.x, y: chest.y };
+    const isBossChest = chest.source === "boss";
+    const bossEvolutionReady = isBossChest && hasReadyWeaponEvolution();
+    const bossEvolutionWon = bossEvolutionReady && Math.random() < 0.6;
     if (chest.kind === "cache") {
         grantGold(randomRange(35, 70) * tier, origin);
         gainXp(state.nextXp * (0.2 + tier * 0.08));
@@ -2823,25 +2972,38 @@ function grantChestReward(chest) {
     }
     else if (chest.kind === "hunt") {
         grantGold(randomRange(55, 100) * tier, origin);
-        if (!evolveReadyWeapons())
+        if (bossEvolutionWon && evolveRandomReadyWeapon(origin)) {
+            grantRelic(origin, 0.3);
+        }
+        else {
             upgradeRandomWeapon();
+        }
         grantRelic(origin, 0.18 + tier * 0.1);
     }
     else {
         grantGold(randomRange(45, 88) * tier, origin);
-        grantRelic(origin, 0.58 + tier * 0.12);
-        if (Math.random() < 0.45)
-            upgradeRandomPassive();
+        if (bossEvolutionReady) {
+            if (bossEvolutionWon && evolveRandomReadyWeapon(origin)) {
+                grantRelic(origin, 0.3);
+            }
+            else {
+                grantRelic(origin, 0.58 + tier * 0.12);
+            }
+        }
+        else {
+            grantRelic(origin, 0.58 + tier * 0.12);
+            if (Math.random() < 0.45)
+                upgradeRandomPassive();
+        }
     }
 }
 function upgradeRandomWeapon() {
     const candidates = state.weapons.filter((weapon) => weapon.level < weapon.maxLevel);
     if (candidates.length === 0)
-        return evolveReadyWeapons();
+        return false;
     const weapon = candidates[Math.floor(Math.random() * candidates.length)];
     weapon.upgrade(game);
     addTextFloater(getPlayer().x, getPlayer().y - 42, `${weapon.name} Lv ${weapon.level}`, weapon.color);
-    evolveReadyWeapons();
     updateHud(true);
     return true;
 }
@@ -2854,7 +3016,7 @@ function upgradeRandomPassive() {
         return false;
     passive.apply(game);
     addTextFloater(getPlayer().x, getPlayer().y - 58, `${passive.title} Lv ${getPassiveLevel(passive.id)}`, "#d8b65f");
-    evolveReadyWeapons();
+    updateHud(true);
     return true;
 }
 function chestColor(kind) {
@@ -3168,25 +3330,51 @@ function gainXp(base) {
     }
 }
 function openUpgradePanel() {
+    hideDetailTooltip();
     state.mode = "levelup";
     ui.upgrade.hidden = false;
     renderUpgradeChoices();
 }
 function renderUpgradeChoices() {
+    hideDetailTooltip();
     ui.upgradeGrid.innerHTML = "";
     const choices = makeUpgradeChoices();
+    if (choices.length === 0) {
+        ui.upgrade.hidden = true;
+        state.mode = "playing";
+        updateHud(true);
+        return;
+    }
     choices.forEach((choice) => {
         const button = document.createElement("button");
-        button.className = "upgrade-card";
+        const tag = document.createElement("small");
+        const sprite = document.createElement("span");
+        const title = document.createElement("strong");
+        const text = document.createElement("p");
+        button.className = `upgrade-card${choice.weaponId ? " has-weapon-sprite" : ""}`;
         button.type = "button";
-        button.innerHTML = `
-      <small>${choice.tag}</small>
-      <strong>${choice.title}</strong>
-      <p>${choice.text}</p>
-    `;
+        button.title = choice.text;
+        button.dataset.tooltip = choice.text;
+        button.setAttribute("aria-label", `${choice.title}. ${choice.text}`);
+        tag.textContent = choice.tag;
+        title.textContent = choice.title;
+        text.textContent = choice.text;
+        sprite.className = "choice-weapon-sprite";
+        sprite.setAttribute("aria-hidden", "true");
+        if (choice.weaponId && hasWeaponEffectSprite(choice.weaponId)) {
+            const definition = weaponDefinitionMap.get(choice.weaponId);
+            if (definition) {
+                button.style.setProperty("--skill-color", definition.color);
+            }
+            applyWeaponEffectSpriteStyle(sprite, choice.weaponId);
+            button.append(tag, sprite, title, text);
+        }
+        else {
+            button.append(tag, title, text);
+        }
         button.addEventListener("click", () => {
+            hideDetailTooltip();
             choice.apply();
-            evolveReadyWeapons();
             state.upgradesTaken.push(choice.id);
             ui.upgrade.hidden = true;
             state.mode = "playing";
@@ -3211,6 +3399,7 @@ function makeUpgradeChoices() {
             title: weapon.name,
             tag: "Weapon",
             text: weapon.getDescription(),
+            weaponId: weapon.id,
             apply() {
                 weapon.upgrade(game);
             },
@@ -3225,6 +3414,7 @@ function makeUpgradeChoices() {
                 title: definition.name,
                 tag: "New Weapon",
                 text: definition.create().getDescription(),
+                weaponId: definition.id,
                 apply() {
                     state.weapons.push(createWeapon(definition.id));
                 },
@@ -3265,6 +3455,7 @@ function addParticles(x, y, color, count, radius = 20) {
     }
 }
 function endRun() {
+    hideDetailTooltip();
     const bankedGold = bankRunGold();
     state.mode = "gameover";
     ui.finalTime.textContent = formatTime(state.time);
@@ -3284,6 +3475,7 @@ function bankRunGold() {
     return state.bankedGoldReward;
 }
 function togglePause() {
+    hideDetailTooltip();
     if (state.mode === "playing") {
         state.previousMode = "playing";
         state.mode = "paused";
@@ -3305,10 +3497,46 @@ function updateHud(forceRail = false) {
     ui.health.style.width = `${clamp((state.player.hp / state.player.maxHp) * 100, 0, 100)}%`;
     ui.xp.style.width = `${clamp((state.xp / state.nextXp) * 100, 0, 100)}%`;
     if (forceRail) {
-        ui.rail.innerHTML = state.weapons
-            .map((weapon) => `<span class="weapon-pill"><i class="weapon-dot" style="color:${weapon.color}"></i>${weapon.name} ${weapon.level}</span>`)
-            .join("");
+        hideDetailTooltip();
+        const weaponPills = state.weapons.map((weapon) => {
+            const evolvedClass = weapon.evolved ? " is-evolved" : "";
+            const tooltip = weaponTooltip(weapon);
+            const spriteStyle = weaponEffectSpriteInlineStyle(weapon.id);
+            return `<span class="weapon-pill${evolvedClass}" style="--skill-color:${weapon.color};${spriteStyle}" data-tooltip="${tooltip}" title="${tooltip}" aria-label="${tooltip}"><i class="weapon-sprite" aria-hidden="true"></i><b class="weapon-level-badge" aria-hidden="true">${weapon.level}</b></span>`;
+        });
+        const passivePills = passiveCatalog
+            .filter((passive) => getPassiveLevel(passive.id) > 0)
+            .map((passive) => `<span class="passive-pill" data-tooltip="${passiveTooltip(passive)}" title="${passiveTooltip(passive)}" aria-label="${passiveTooltip(passive)}"><i class="passive-dot"></i>${escapeHtml(passive.title)} ${getPassiveLevel(passive.id)}/${passive.maxLevel}</span>`);
+        const relicCards = state.relics
+            .map((relicId) => relicCatalog.find((relic) => relic.id === relicId))
+            .filter((relic) => Boolean(relic))
+            .map((relic) => `<span class="relic-pill" style="--relic-color:${relic.color}" data-tooltip="${relicTooltip(relic)}" title="${relicTooltip(relic)}" aria-label="${relicTooltip(relic)}"><i class="relic-dot" style="color:${relic.color}"></i><strong>${escapeHtml(relic.title)}</strong><em>${escapeHtml(relic.text)}</em></span>`);
+        ui.rail.innerHTML = weaponPills.join("");
+        ui.passiveRail.innerHTML = passivePills.join("");
+        ui.relicRail.innerHTML = relicCards.join("");
+        ui.relicRail.classList.toggle("is-visible", relicCards.length > 0);
     }
+}
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+function weaponTooltip(weapon) {
+    const requiredPassive = getPassiveUpgrade(weapon.evolution.requiredPassive);
+    const evolutionText = weapon.evolved
+        ? `Evolved: ${weapon.evolution.name}`
+        : `Evolution: ${weapon.evolution.name} requires ${requiredPassive.title}`;
+    return escapeHtml(`${weapon.name} Lv ${weapon.level}/${weapon.maxLevel}. ${weapon.getDescription()} ${evolutionText}.`);
+}
+function passiveTooltip(passive) {
+    return escapeHtml(`${passive.title} Lv ${getPassiveLevel(passive.id)}/${passive.maxLevel}. ${passive.text}`);
+}
+function relicTooltip(relic) {
+    return escapeHtml(`${relic.title}. ${relic.text}`);
 }
 function render() {
     ctx.clearRect(0, 0, width, height);
@@ -3412,17 +3640,29 @@ function drawZones(camera) {
             return;
         const visibleRatio = clamp(zone.life / zone.maxLife, 0, 1);
         ctx.save();
-        ctx.globalAlpha = zone.delay > 0 ? 0.28 : 0.18 + visibleRatio * 0.22;
+        ctx.translate(zone.x - camera.x, zone.y - camera.y);
+        drawWeaponEffectSprite(zone.sourceWeaponId, zone.radius * 1.35, zone.evolved, 0.26 + visibleRatio * 0.18);
+        ctx.globalAlpha = zone.delay > 0 ? 0.22 : 0.14 + visibleRatio * 0.22;
         ctx.strokeStyle = zone.color;
         ctx.fillStyle = zone.color;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(zone.x - camera.x, zone.y - camera.y, zone.radius, 0, TAU);
+        ctx.arc(0, 0, zone.radius, 0, TAU);
         ctx.stroke();
         ctx.globalAlpha *= 0.12;
         ctx.beginPath();
-        ctx.arc(zone.x - camera.x, zone.y - camera.y, zone.radius, 0, TAU);
+        ctx.arc(0, 0, zone.radius, 0, TAU);
         ctx.fill();
+        ctx.globalAlpha = 0.24 + visibleRatio * 0.18;
+        for (let i = 0; i < 6; i += 1) {
+            const angle = zone.life * 1.4 + (TAU / 6) * i;
+            const inner = zone.radius * 0.52;
+            const outer = zone.radius * 0.88;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+            ctx.lineTo(Math.cos(angle + 0.18) * outer, Math.sin(angle + 0.18) * outer);
+            ctx.stroke();
+        }
         ctx.restore();
     });
 }
@@ -3432,12 +3672,20 @@ function drawMines(camera) {
             return;
         ctx.save();
         ctx.translate(mine.x - camera.x, mine.y - camera.y);
+        drawWeaponEffectSprite(mine.sourceWeaponId, Math.max(42, mine.triggerRadius * 1.15), mine.evolved, mine.armedAfter > 0 ? 0.38 : 0.58);
         ctx.strokeStyle = mine.color;
         ctx.fillStyle = mine.armedAfter > 0 ? "rgba(110,207,119,0.24)" : "rgba(110,207,119,0.48)";
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(0, 0, 9, 0, TAU);
         ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        for (let i = 0; i < 6; i += 1) {
+            const angle = (TAU / 6) * i + mine.life * 0.8;
+            ctx.moveTo(Math.cos(angle) * 6, Math.sin(angle) * 6);
+            ctx.lineTo(Math.cos(angle) * 14, Math.sin(angle) * 14);
+        }
         ctx.stroke();
         ctx.globalAlpha = 0.18;
         ctx.beginPath();
@@ -3492,27 +3740,136 @@ function drawPlayer(camera) {
     const player = getPlayer();
     const x = player.x - camera.x;
     const y = player.y - camera.y;
+    const character = getSelectedCharacter();
     ctx.save();
     ctx.translate(x, y);
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = player.hurtFlash > 0 ? "#c83f53" : player.color;
-    ctx.fillStyle = player.hurtFlash > 0 ? "#f6b3a5" : player.color;
+    drawCharacterAsset(player, character);
+    ctx.restore();
+}
+function drawCharacterAsset(player, character) {
+    const hurtColor = player.hurtFlash > 0 ? "#f6b3a5" : character.color;
+    const radius = player.r;
+    ctx.shadowBlur = 22;
+    ctx.shadowColor = player.hurtFlash > 0 ? "#c83f53" : character.color;
+    ctx.fillStyle = "rgba(12,10,8,0.72)";
     ctx.beginPath();
-    ctx.arc(0, 0, player.r, 0, TAU);
+    ctx.ellipse(0, radius * 0.82, radius * 1.08, radius * 0.28, 0, 0, TAU);
     ctx.fill();
+    if (drawAtlasCell(characterAtlas, characterSpriteCells[character.id], 0, 0, radius * 4.2, radius * 4.2)) {
+        if (player.hurtFlash > 0) {
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = "rgba(246,179,165,0.72)";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 1.36, 0, TAU);
+            ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        return;
+    }
+    ctx.fillStyle = hurtColor;
+    ctx.strokeStyle = "rgba(246,238,220,0.72)";
+    ctx.lineWidth = 2;
+    if (character.id === "hunter") {
+        ctx.beginPath();
+        ctx.moveTo(0, -radius * 1.2);
+        ctx.lineTo(radius * 0.9, radius * 0.65);
+        ctx.lineTo(0, radius);
+        ctx.lineTo(-radius * 0.9, radius * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#c83f53";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 1.05, radius * 0.12);
+        ctx.lineTo(radius * 0.76, -radius * 0.34);
+        ctx.moveTo(radius * 0.2, -radius * 0.62);
+        ctx.lineTo(radius * 0.98, -radius * 0.36);
+        ctx.stroke();
+    }
+    else if (character.id === "vessel") {
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.96, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#33150c";
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.48, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = "#ffd0a3";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.58, -radius * 0.74);
+        ctx.lineTo(-radius * 0.86, -radius * 1.16);
+        ctx.moveTo(radius * 0.58, -radius * 0.74);
+        ctx.lineTo(radius * 0.86, -radius * 1.16);
+        ctx.stroke();
+    }
+    else if (character.id === "archivist") {
+        ctx.beginPath();
+        ctx.roundRect(-radius * 0.7, -radius * 0.92, radius * 1.4, radius * 1.76, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#f6eedc";
+        ctx.lineWidth = 2;
+        for (let i = -1; i <= 1; i += 1) {
+            ctx.beginPath();
+            ctx.moveTo(-radius * 0.42, i * radius * 0.28);
+            ctx.lineTo(radius * 0.42, i * radius * 0.18);
+            ctx.stroke();
+        }
+    }
+    else if (character.id === "bellkeeper") {
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.86, radius * 0.62);
+        ctx.quadraticCurveTo(0, -radius * 1.22, radius * 0.86, radius * 0.62);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#e7f7ff";
+        ctx.beginPath();
+        ctx.arc(0, radius * 0.24, radius * 0.38, 0, Math.PI);
+        ctx.stroke();
+    }
+    else if (character.id === "duelist") {
+        ctx.beginPath();
+        ctx.moveTo(0, -radius);
+        ctx.lineTo(radius * 0.78, radius * 0.32);
+        ctx.lineTo(0, radius * 0.9);
+        ctx.lineTo(-radius * 0.78, radius * 0.32);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#fff4b8";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 1.06, radius * 0.56);
+        ctx.lineTo(radius * 1.16, -radius * 0.82);
+        ctx.stroke();
+    }
+    else {
+        ctx.beginPath();
+        ctx.roundRect(-radius * 0.82, -radius * 0.82, radius * 1.64, radius * 1.64, 5);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#26331e";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -radius * 0.64);
+        ctx.lineTo(radius * 0.5, -radius * 0.28);
+        ctx.lineTo(radius * 0.36, radius * 0.54);
+        ctx.lineTo(0, radius * 0.82);
+        ctx.lineTo(-radius * 0.36, radius * 0.54);
+        ctx.lineTo(-radius * 0.5, -radius * 0.28);
+        ctx.closePath();
+        ctx.stroke();
+    }
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#19130d";
     ctx.beginPath();
-    ctx.arc(5, -4, 4, 0, TAU);
+    ctx.arc(radius * 0.32, -radius * 0.18, radius * 0.16, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = "#c83f53";
-    ctx.beginPath();
-    ctx.moveTo(-4, -2);
-    ctx.lineTo(-18, 10);
-    ctx.lineTo(-6, 13);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
 }
 function drawEnemies(camera) {
     state.enemies.forEach((enemy) => {
@@ -3522,22 +3879,7 @@ function drawEnemies(camera) {
         const y = enemy.y - camera.y;
         ctx.save();
         ctx.translate(x, y);
-        ctx.shadowBlur = 14;
-        ctx.shadowColor = enemy.color;
-        ctx.fillStyle = enemy.hitFlash > 0 ? "#f6eedc" : enemy.color;
-        if (enemy.kind === "boss") {
-            roundedPoly(enemy.r, 9);
-        }
-        else if (enemy.kind === "brute") {
-            roundedPoly(enemy.r, 7);
-        }
-        else if (enemy.kind === "runner") {
-            roundedPoly(enemy.r, 3);
-        }
-        else {
-            roundedPoly(enemy.r, 5);
-        }
-        ctx.fill();
+        drawEnemyAsset(enemy);
         ctx.shadowBlur = 0;
         const hpRatio = clamp(enemy.hp / enemy.maxHp, 0, 1);
         if (hpRatio < 0.96) {
@@ -3555,6 +3897,104 @@ function drawEnemies(camera) {
         }
         ctx.restore();
     });
+}
+function drawEnemyAsset(enemy) {
+    const radius = enemy.r;
+    const fill = enemy.hitFlash > 0 ? "#f6eedc" : enemy.color;
+    ctx.shadowBlur = enemy.kind === "boss" ? 28 : 14;
+    ctx.shadowColor = enemy.color;
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = "rgba(12,10,8,0.74)";
+    ctx.lineWidth = enemy.kind === "boss" ? 4 : 2;
+    const spriteScale = enemy.kind === "boss" ? 3.1 : enemy.kind === "brute" ? 3.25 : 3.55;
+    if (drawAtlasCell(characterAtlas, enemySpriteCells[enemy.kind], 0, 0, radius * spriteScale, radius * spriteScale)) {
+        if (enemy.hitFlash > 0) {
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = "rgba(246,238,220,0.82)";
+            ctx.lineWidth = enemy.kind === "boss" ? 4 : 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 1.16, 0, TAU);
+            ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        return;
+    }
+    if (enemy.kind === "runner") {
+        ctx.beginPath();
+        ctx.moveTo(radius * 1.08, 0);
+        ctx.lineTo(-radius * 0.72, -radius * 0.78);
+        ctx.lineTo(-radius * 0.34, 0);
+        ctx.lineTo(-radius * 0.72, radius * 0.78);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(246,238,220,0.62)";
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.88, -radius * 0.52);
+        ctx.lineTo(-radius * 1.28, -radius * 0.82);
+        ctx.moveTo(-radius * 0.88, radius * 0.52);
+        ctx.lineTo(-radius * 1.28, radius * 0.82);
+        ctx.stroke();
+    }
+    else if (enemy.kind === "brute") {
+        roundedPoly(radius, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#d8b65f";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.12, -0.25, Math.PI + 0.25);
+        ctx.stroke();
+        for (let i = 0; i < 4; i += 1) {
+            const angle = -Math.PI * 0.85 + i * 0.56;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(angle) * radius * 0.78, Math.sin(angle) * radius * 0.78);
+            ctx.lineTo(Math.cos(angle) * radius * 1.16, Math.sin(angle) * radius * 1.16);
+            ctx.stroke();
+        }
+    }
+    else if (enemy.kind === "boss") {
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.92, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#f6eedc";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.16, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = "#19130d";
+        for (let i = 0; i < 8; i += 1) {
+            const angle = (TAU / 8) * i + enemy.hitFlash * 0.2;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(angle) * radius * 0.96, Math.sin(angle) * radius * 0.96);
+            ctx.lineTo(Math.cos(angle + 0.16) * radius * 1.35, Math.sin(angle + 0.16) * radius * 1.35);
+            ctx.lineTo(Math.cos(angle - 0.16) * radius * 1.35, Math.sin(angle - 0.16) * radius * 1.35);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.fillStyle = "#ffe69a";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius * 0.42, radius * 0.18, 0, 0, TAU);
+        ctx.fill();
+    }
+    else {
+        roundedPoly(radius, 5);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "rgba(12,10,8,0.62)";
+        ctx.beginPath();
+        ctx.arc(-radius * 0.22, -radius * 0.08, radius * 0.12, 0, TAU);
+        ctx.arc(radius * 0.28, -radius * 0.08, radius * 0.12, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(200,63,83,0.76)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.5, radius * 0.62);
+        ctx.lineTo(0, radius * 1.05);
+        ctx.lineTo(radius * 0.5, radius * 0.62);
+        ctx.stroke();
+    }
 }
 function roundedPoly(radius, sides) {
     ctx.beginPath();
@@ -3578,14 +4018,66 @@ function drawProjectiles(camera) {
         const y = bullet.y - camera.y;
         ctx.save();
         ctx.translate(x, y);
-        ctx.shadowBlur = 16;
-        ctx.shadowColor = bullet.color;
-        ctx.fillStyle = bullet.color;
+        drawProjectileAsset(bullet);
+        ctx.restore();
+    });
+}
+function drawProjectileAsset(bullet) {
+    const angle = Math.atan2(bullet.vy, bullet.vx);
+    ctx.rotate(angle);
+    ctx.shadowBlur = bullet.evolved ? 24 : 16;
+    ctx.shadowColor = bullet.color;
+    ctx.fillStyle = bullet.color;
+    ctx.strokeStyle = bullet.evolved ? "#f6eedc" : "rgba(246,238,220,0.5)";
+    ctx.lineWidth = bullet.evolved ? 2 : 1.5;
+    if (drawProjectileSprite(bullet.sourceWeaponId, Math.max(34, bullet.r * (bullet.evolved ? 8.2 : 6.8)))) {
+        if (bullet.evolved) {
+            ctx.globalAlpha = 0.42;
+            ctx.beginPath();
+            ctx.arc(0, 0, bullet.r * 2.35, 0, TAU);
+            ctx.stroke();
+        }
+        return;
+    }
+    if (bullet.sourceWeaponId === "bloodBats") {
+        ctx.beginPath();
+        ctx.moveTo(bullet.r * 1.1, 0);
+        ctx.quadraticCurveTo(bullet.r * 0.2, -bullet.r * 0.9, -bullet.r * 0.6, -bullet.r * 0.2);
+        ctx.quadraticCurveTo(-bullet.r * 0.25, 0, -bullet.r * 0.6, bullet.r * 0.2);
+        ctx.quadraticCurveTo(bullet.r * 0.2, bullet.r * 0.9, bullet.r * 1.1, 0);
+        ctx.fill();
+    }
+    else if (bullet.sourceWeaponId === "ricochetCrossbow") {
+        ctx.beginPath();
+        ctx.moveTo(bullet.r * 1.6, 0);
+        ctx.lineTo(-bullet.r * 0.6, -bullet.r * 0.7);
+        ctx.lineTo(-bullet.r * 0.25, 0);
+        ctx.lineTo(-bullet.r * 0.6, bullet.r * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+    else if (bullet.sourceWeaponId === "silverBolt") {
+        ctx.beginPath();
+        ctx.moveTo(bullet.r * 1.8, 0);
+        ctx.lineTo(0, -bullet.r * 0.58);
+        ctx.lineTo(-bullet.r * 1.2, 0);
+        ctx.lineTo(0, bullet.r * 0.58);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+    else {
         ctx.beginPath();
         ctx.arc(0, 0, bullet.r, 0, TAU);
         ctx.fill();
-        ctx.restore();
-    });
+    }
+    if (bullet.evolved) {
+        ctx.globalAlpha = 0.42;
+        ctx.beginPath();
+        ctx.arc(0, 0, bullet.r * 1.8, 0, TAU);
+        ctx.stroke();
+    }
 }
 function drawScythes(camera) {
     state.scythes.forEach((scythe) => {
@@ -3593,7 +4085,20 @@ function drawScythes(camera) {
             return;
         ctx.save();
         ctx.translate(scythe.x - camera.x, scythe.y - camera.y);
-        ctx.rotate(scythe.angle + scythe.spin);
+        ctx.rotate(scythe.angle);
+        if (drawProjectileSprite(scythe.sourceWeaponId, Math.max(54, scythe.r * 3.4))) {
+            if (scythe.evolved) {
+                ctx.globalAlpha = 0.42;
+                ctx.strokeStyle = "#f6eedc";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, scythe.r * 1.7, 0, TAU);
+                ctx.stroke();
+            }
+            ctx.restore();
+            return;
+        }
+        ctx.rotate(scythe.spin);
         ctx.shadowBlur = 16;
         ctx.shadowColor = scythe.color;
         ctx.strokeStyle = scythe.color;
@@ -3625,6 +4130,18 @@ function drawBeams(camera) {
         ctx.moveTo(beam.x - camera.x, beam.y - camera.y);
         ctx.lineTo(beam.x + beam.dx * beam.length - camera.x, beam.y + beam.dy * beam.length - camera.y);
         ctx.stroke();
+        ctx.globalAlpha = alpha * 0.48;
+        ctx.lineWidth = Math.max(2, beam.width * 0.28);
+        ctx.strokeStyle = "#f6eedc";
+        ctx.beginPath();
+        ctx.moveTo(beam.x - camera.x, beam.y - camera.y);
+        ctx.lineTo(beam.x + beam.dx * beam.length - camera.x, beam.y + beam.dy * beam.length - camera.y);
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(beam.x + beam.dx * beam.length * 0.74 - camera.x, beam.y + beam.dy * beam.length * 0.74 - camera.y);
+        ctx.rotate(Math.atan2(beam.dy, beam.dx));
+        drawWeaponEffectSprite(beam.sourceWeaponId, Math.max(64, beam.width * 3.8), beam.evolved, alpha * 0.72);
+        ctx.restore();
         ctx.restore();
     });
 }
@@ -3644,8 +4161,30 @@ function drawStrikes(camera) {
         ctx.lineTo(midX - camera.x, midY - camera.y);
         ctx.lineTo(strike.toX - camera.x, strike.toY - camera.y);
         ctx.stroke();
+        ctx.translate(strike.toX - camera.x, strike.toY - camera.y);
+        drawWeaponEffectSprite(strike.sourceWeaponId, strike.evolved ? 54 : 42, strike.evolved, alpha * 0.68);
         ctx.restore();
     });
+}
+function drawWeaponEffectSprite(weaponId, size, evolved = false, alpha = 1) {
+    if (!weaponId)
+        return false;
+    const cell = weaponEffectSpriteCells[weaponId];
+    if (!cell)
+        return false;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    const drew = drawAtlasCell(weaponEffectAtlas, cell, 0, 0, size, size);
+    if (drew && evolved) {
+        ctx.globalAlpha = Math.min(0.48, alpha * 0.54);
+        ctx.strokeStyle = "#f6eedc";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.42, 0, TAU);
+        ctx.stroke();
+    }
+    ctx.restore();
+    return drew;
 }
 function drawGems(camera) {
     state.gems.forEach((gem) => {
@@ -3722,6 +4261,39 @@ function setPointerPosition(event) {
     ui.touchStick.style.top = `${pointer.startY}px`;
     ui.touchStickKnob.style.transform = `translate(${joy.x * knobDistance}px, ${joy.y * knobDistance}px)`;
 }
+function getTooltipTarget(target) {
+    if (!(target instanceof Element))
+        return null;
+    const element = target.closest("[data-tooltip]");
+    return element instanceof HTMLElement ? element : null;
+}
+function showDetailTooltip(element, clientX, clientY) {
+    const text = element.dataset.tooltip;
+    if (!text)
+        return;
+    ui.detailTooltip.textContent = text;
+    ui.detailTooltip.hidden = false;
+    positionDetailTooltip(clientX, clientY);
+}
+function hideDetailTooltip() {
+    ui.detailTooltip.hidden = true;
+}
+function positionDetailTooltip(clientX, clientY) {
+    const margin = 12;
+    let left = clientX + margin;
+    let top = clientY + margin;
+    ui.detailTooltip.style.left = `${left}px`;
+    ui.detailTooltip.style.top = `${top}px`;
+    const rect = ui.detailTooltip.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 8) {
+        left = Math.max(8, clientX - rect.width - margin);
+    }
+    if (rect.bottom > window.innerHeight - 8) {
+        top = Math.max(8, clientY - rect.height - margin);
+    }
+    ui.detailTooltip.style.left = `${left}px`;
+    ui.detailTooltip.style.top = `${top}px`;
+}
 canvas.addEventListener("pointerdown", (event) => {
     if (state.mode !== "playing")
         return;
@@ -3766,6 +4338,31 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => {
     keys.delete(event.code);
 });
+document.addEventListener("pointerover", (event) => {
+    const target = getTooltipTarget(event.target);
+    if (!target)
+        return;
+    showDetailTooltip(target, event.clientX, event.clientY);
+});
+document.addEventListener("pointermove", (event) => {
+    if (ui.detailTooltip.hidden)
+        return;
+    positionDetailTooltip(event.clientX, event.clientY);
+});
+document.addEventListener("pointerout", (event) => {
+    const nextTarget = getTooltipTarget(event.relatedTarget);
+    if (nextTarget)
+        return;
+    hideDetailTooltip();
+});
+document.addEventListener("focusin", (event) => {
+    const target = getTooltipTarget(event.target);
+    if (!target)
+        return;
+    const rect = target.getBoundingClientRect();
+    showDetailTooltip(target, rect.left, rect.bottom);
+});
+document.addEventListener("focusout", hideDetailTooltip);
 ui.openCharacter.addEventListener("click", () => showMenuView("character"));
 ui.openShop.addEventListener("click", () => showMenuView("shop"));
 ui.characterBack.addEventListener("click", () => showMenuView("main"));
